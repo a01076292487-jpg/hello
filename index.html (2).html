@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>제주특별자치도 상세 지역별 인구 통계 대시보드</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Leaflet CSS CDN -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <!-- Leaflet JS CDN -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;600;700;800&display=swap');
+        body {
+            font-family: 'Pretendard', sans-serif;
+        }
+        /* Leaflet Map Styling Override */
+        #map {
+            background-color: #f8fafc;
+            z-index: 10;
+        }
+        /* Custom map tooltips and controls */
+        .leaflet-tooltip-custom {
+            background: rgba(15, 23, 42, 0.95) !important;
+            border: 1px solid rgba(255, 255, 255, 0.15) !important;
+            border-radius: 12px !important;
+            color: white !important;
+            padding: 8px 12px !important;
+            font-size: 11px !important;
+            font-weight: 600 !important;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3) !important;
+        }
+        .leaflet-tooltip-custom::before {
+            border-top-color: rgba(15, 23, 42, 0.95) !important;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
+
+    <!-- Header -->
+    <header class="bg-white border-b border-slate-100 sticky top-0 z-40 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div class="flex items-center gap-3">
+                <div class="p-2.5 bg-teal-500 rounded-2xl text-white shadow-md shadow-teal-500/20">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold text-slate-900 tracking-tight">제주특별자치도 지역별 인구 대시보드</h1>
+                    <p class="text-xs text-slate-500">6대 생활권 정밀 지도 GIS 정보 분석 & 실시간 연계 통계</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2 bg-indigo-50 p-1.5 rounded-2xl text-xs font-semibold text-indigo-800 border border-indigo-100">
+                <span class="px-3 py-1 rounded-xl bg-white shadow-sm text-indigo-600">6개 정밀 권역</span>
+                <span class="px-3 py-1 text-slate-500">2018 - 2026 통계 트렌드</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 flex flex-col lg:flex-row gap-8">
+        
+        <!-- Left Column: Detailed Leaflet Map -->
+        <section class="w-full lg:w-3/5 flex flex-col gap-6">
+            <div class="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 flex flex-col relative overflow-hidden h-[540px] lg:h-full min-h-[500px]">
+                <div class="flex justify-between items-start mb-4 z-20">
+                    <div>
+                        <h2 class="text-lg font-bold text-slate-900">제주 6대 권역 GIS 위치 지도</h2>
+                        <p class="text-sm text-slate-400">지도의 폴리곤 영역에 마우스를 올리거나 클릭하면 해당 지역 데이터로 동기화됩니다.</p>
+                    </div>
+                    <!-- Reset Button -->
+                    <button id="btn-reset" class="hidden text-xs font-semibold text-teal-600 hover:text-teal-700 bg-teal-50 hover:bg-teal-100 px-3 py-2 rounded-xl transition-all shadow-sm">
+                        전체 도(道) 통계로 초기화
+                    </button>
+                </div>
+
+                <!-- Leaflet Map Container -->
+                <div class="flex-grow relative rounded-2xl overflow-hidden border border-slate-100 shadow-inner">
+                    <div id="map" class="w-full h-full"></div>
+                </div>
+
+                <!-- Color indicators / Legend -->
+                <div class="grid grid-cols-3 sm:grid-cols-6 gap-3 mt-4 pt-4 border-t border-slate-100 text-[11px] text-slate-500 z-20">
+                    <div class="flex items-center gap-1.5 cursor-pointer hover:text-slate-800" onclick="focusRegion('jeju-west')">
+                        <span class="w-3 h-3 bg-emerald-500/20 border-2 border-emerald-500 rounded-md"></span>
+                        <span class="font-medium">제주 서부</span>
+                    </div>
+                    <div class="flex items-center gap-1.5 cursor-pointer hover:text-slate-800" onclick="focusRegion('jeju-center')">
+                        <span class="w-3 h-3 bg-teal-500/20 border-2 border-teal-500 rounded-md"></span>
+                        <span class="font-medium">제주 중부</span>
+                    </div>
+                    <div class="flex items-center gap-1.5 cursor-pointer hover:text-slate-800" onclick="focusRegion('jeju-east')">
+                        <span class="w-3 h-3 bg-cyan-500/20 border-2 border-cyan-500 rounded-md"></span>
+                        <span class="font-medium">제주 동부</span>
+                    </div>
+                    <div class="flex items-center gap-1.5 cursor-pointer hover:text-slate-800" onclick="focusRegion('seogwipo-west')">
+                        <span class="w-3 h-3 bg-blue-500/20 border-2 border-blue-500 rounded-md"></span>
+                        <span class="font-medium">서귀포 서부</span>
+                    </div>
+                    <div class="flex items-center gap-1.5 cursor-pointer hover:text-slate-800" onclick="focusRegion('seogwipo-center')">
+                        <span class="w-3 h-3 bg-indigo-500/20 border-2 border-indigo-500 rounded-md"></span>
+                        <span class="font-medium">서귀포 중부</span>
+                    </div>
+                    <div class="flex items-center gap-1.5 cursor-pointer hover:text-slate-800" onclick="focusRegion('seogwipo-east')">
+                        <span class="w-3 h-3 bg-sky-500/20 border-2 border-sky-500 rounded-md"></span>
+                        <span class="font-medium">서귀포 동부</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Right Column: Stats & Dynamic Chart Card -->
+        <section class="w-full lg:w-2/5 flex flex-col gap-6">
+            
+            <!-- Quick Info Panel -->
+            <div id="info-panel" class="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 flex flex-col transition-all duration-300">
+                <div class="flex items-center justify-between mb-4">
+                    <span id="region-type" class="px-2.5 py-1 text-[10px] font-extrabold tracking-wider text-teal-800 bg-teal-50 rounded-full uppercase">제주특별자치도 전체</span>
+                    <span id="growth-badge" class="flex items-center gap-1 text-xs font-semibold text-rose-500">
+                        <svg id="trend-icon" xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M19 13l-7 7-7-7" />
+                        </svg>
+                        <span id="growth-rate">-0.52% (전년비)</span>
+                    </span>
+                </div>
+
+                <h3 id="region-title" class="text-2xl font-bold text-slate-900 mb-1">제주특별자치도</h3>
+                <p id="region-desc" class="text-sm text-slate-500 mb-6 leading-relaxed">
+                    대한민국 최대의 섬이자 특별자치도로, 독특한 화산 지형과 자연 생태계, 고유의 문화를 지닌 아름다운 평화의 섬입니다.
+                </p>
+
+                <!-- Core Metrics Grid -->
+                <div class="grid grid-cols-2 gap-4 mb-6">
+                    <!-- Total Pop -->
+                    <div class="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                        <p class="text-[11px] font-semibold text-slate-400 mb-1">총 거주 인구</p>
+                        <p id="stat-total" class="text-xl font-extrabold text-slate-900">675,500명</p>
+                    </div>
+                    <!-- Households -->
+                    <div class="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                        <p class="text-[11px] font-semibold text-slate-400 mb-1">총 세대 수</p>
+                        <p id="stat-households" class="text-xl font-extrabold text-slate-900">314,800세대</p>
+                    </div>
+                    <!-- Men -->
+                    <div class="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                        <p class="text-[11px] font-semibold text-slate-400 mb-1">남성 인구</p>
+                        <p id="stat-men" class="text-lg font-bold text-slate-800">338,900명</p>
+                    </div>
+                    <!-- Women -->
+                    <div class="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                        <p class="text-[11px] font-semibold text-slate-400 mb-1">여성 인구</p>
+                        <p id="stat-women" class="text-lg font-bold text-slate-800">336,600명</p>
+                    </div>
+                </div>
+
+                <!-- Gender Ratio Progress Bar -->
+                <div class="mb-5">
+                    <div class="flex justify-between text-xs font-semibold text-slate-500 mb-2">
+                        <span>남성 비율 (<span id="ratio-men">50.2</span>%)</span>
+                        <span>여성 비율 (<span id="ratio-women">49.8</span>%)</span>
+                    </div>
+                    <div class="w-full h-3 bg-slate-100 rounded-full overflow-hidden flex">
+                        <div id="bar-men" class="bg-teal-500 h-full transition-all duration-500" style="width: 50.2%"></div>
+                        <div id="bar-women" class="bg-sky-400 h-full transition-all duration-500" style="width: 49.8%"></div>
+                    </div>
+                </div>
+
+                <!-- Density Indicator -->
+                <div class="flex items-center justify-between text-xs font-semibold text-slate-500 bg-slate-50 p-3.5 rounded-xl border border-slate-100">
+                    <span class="flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        평균 인구 밀도
+                    </span>
+                    <span id="stat-density" class="text-slate-800 font-extrabold">364명/㎢</span>
+                </div>
+            </div>
+
+            <!-- Dynamic Chart Card -->
+            <div class="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 flex flex-col">
+                <div class="flex items-center justify-between mb-4">
+                    <div>
+                        <h4 class="text-sm font-bold text-slate-900">연간 인구 변동 추이</h4>
+                        <p class="text-[11px] text-slate-400">최근 9개년 (2018년 ~ 2026년 현재)</p>
+                    </div>
+                    <div class="p-1.5 bg-slate-50 rounded-lg text-slate-400">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M7 12l3-3 3 3 4-4M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                        </svg>
+                    </div>
+                </div>
+
+                <!-- Canvas for Chart.js -->
+                <div class="relative w-full h-[180px]">
+                    <canvas id="trendChart"></canvas>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Detailed Regional Comparison Table Section -->
+    <section class="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pb-12">
+        <div class="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+            <h3 class="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
+                <span class="w-1.5 h-6 bg-teal-500 rounded-full"></span>
+                6대 권역 핵심 지표 비교 요약
+            </h3>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="border-b border-slate-100 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                            <th class="pb-3 pl-2">권역명</th>
+                            <th class="pb-3 text-right">거주 인구</th>
+                            <th class="pb-3 text-right">세대수</th>
+                            <th class="pb-3 text-right">성비(남/여)</th>
+                            <th class="pb-3 text-right">인구 밀도</th>
+                            <th class="pb-3 text-right">주요 연령 특징</th>
+                            <th class="pb-3 text-right pr-2">주요 입지 기능</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-50 text-xs text-slate-600">
+                        <tr class="hover:bg-slate-50/50 transition-colors cursor-pointer" onclick="focusRegion('jeju-west')">
+                            <td class="py-4 pl-2 font-bold text-emerald-700">제주 서부</td>
+                            <td class="py-4 text-right">81,200명</td>
+                            <td class="py-4 text-right">37,800세대</td>
+                            <td class="py-4 text-right">51.1% / 48.9%</td>
+                            <td class="py-4 text-right">241명/㎢</td>
+                            <td class="py-4 text-right text-emerald-600 font-medium">3040 귀농귀촌 증가</td>
+                            <td class="py-4 text-right text-slate-500 pr-2">애월 카페거리, 한림항</td>
+                        </tr>
+                        <tr class="hover:bg-slate-50/50 transition-colors cursor-pointer" onclick="focusRegion('jeju-center')">
+                            <td class="py-4 pl-2 font-bold text-teal-700">제주 중부</td>
+                            <td class="py-4 text-right">385,000명</td>
+                            <td class="py-4 text-right">178,200세대</td>
+                            <td class="py-4 text-right">49.8% / 50.2%</td>
+                            <td class="py-4 text-right">1,515명/㎢</td>
+                            <td class="py-4 text-right text-teal-600 font-medium">2030 청년 최고밀집</td>
+                            <td class="py-4 text-right text-slate-500 pr-2">공항, 행정타운, 오라/노형</td>
+                        </tr>
+                        <tr class="hover:bg-slate-50/50 transition-colors cursor-pointer" onclick="focusRegion('jeju-east')">
+                            <td class="py-4 pl-2 font-bold text-cyan-700">제주 동부</td>
+                            <td class="py-4 text-right">42,500명</td>
+                            <td class="py-4 text-right">20,100세대</td>
+                            <td class="py-4 text-right">51.6% / 48.4%</td>
+                            <td class="py-4 text-right">132명/㎢</td>
+                            <td class="py-4 text-right text-cyan-600 font-medium">60대 이상 고령층</td>
+                            <td class="py-4 text-right text-slate-500 pr-2">조천 함덕, 구좌 당근, 우도</td>
+                        </tr>
+                        <tr class="hover:bg-slate-50/50 transition-colors cursor-pointer" onclick="focusRegion('seogwipo-west')">
+                            <td class="py-4 pl-2 font-bold text-blue-700">서귀포 서부</td>
+                            <td class="py-4 text-right">43,100명</td>
+                            <td class="py-4 text-right">19,800세대</td>
+                            <td class="py-4 text-right">50.9% / 49.1%</td>
+                            <td class="py-4 text-right">168명/㎢</td>
+                            <td class="py-4 text-right text-blue-600 font-medium">학령기 아동 비율 높음</td>
+                            <td class="py-4 text-right text-slate-500 pr-2">영어교육도시, 신화월드</td>
+                        </tr>
+                        <tr class="hover:bg-slate-50/50 transition-colors cursor-pointer" onclick="focusRegion('seogwipo-center')">
+                            <td class="py-4 pl-2 font-bold text-indigo-700">서귀포 중부</td>
+                            <td class="py-4 text-right">81,900명</td>
+                            <td class="py-4 text-right">39,400세대</td>
+                            <td class="py-4 text-right">50.4% / 49.6%</td>
+                            <td class="py-4 text-right">396명/㎢</td>
+                            <td class="py-4 text-right text-indigo-600 font-medium">가족 단위 실거주</td>
+                            <td class="py-4 text-right text-slate-500 pr-2">이중섭거리, 매일올레시장</td>
+                        </tr>
+                        <tr class="hover:bg-slate-50/50 transition-colors cursor-pointer" onclick="focusRegion('seogwipo-east')">
+                            <td class="py-4 pl-2 font-bold text-sky-700">서귀포 동부</td>
+                            <td class="py-4 text-right">41,800명</td>
+                            <td class="py-4 text-right">19,500세대</td>
+                            <td class="py-4 text-right">51.2% / 48.8%</td>
+                            <td class="py-4 text-right">126명/㎢</td>
+                            <td class="py-4 text-right text-sky-600 font-medium">50대 자영업/농업</td>
+                            <td class="py-4 text-right text-slate-500 pr-2">성산 일출봉, 남원 감귤밭</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="bg-white border-t border-slate-200/50 py-6 text-center text-xs text-slate-400 mt-auto">
+        <div class="max-w-7xl mx-auto px-4">
+            <p>© 2026 제주 정밀 지리인구 통계 시스템 - Jeju Regional Analytics Dashboard. All Rights Reserved.</p>
+            <p class="mt-1">오픈스트리트맵 지리 정보 연동 및 행정안전부 권역별 보정 통계 적용</p>
+        </div>
+    </footer>
+
+    <!-- Interactive Logic & Scripting -->
+    <script>
+        // Hallasan base and surrounding regional GIS coordinate systems
+        const HALLA = [33.3617, 126.5292];
+        const GOSAN = [33.29, 126.16];
+        const NW_1 = [33.41, 126.20];
+        const NW_2 = [33.47, 126.32];
+        const N_DIV = [33.49, 126.43];
+        const N_CENT = [33.52, 126.52];
+        const NE_DIV = [33.54, 126.65];
+        const NE_EAST = [33.54, 126.78];
+        const EAST_TIP = [33.46, 126.93];
+        const SE_DIV = [33.38, 126.82];
+        const SE_SOUTH = [33.28, 126.72];
+        const S_DIV = [33.26, 126.64];
+        const S_CENT = [33.24, 126.56];
+        const SW_DIV = [33.24, 126.41];
+        const SW_INNER = [33.33, 126.41];
+        const SW_SOUTH = [33.21, 126.25];
+        const W_DIV = [33.32, 126.33];
+
+        // Database
+        const data = {
+            total: {
+                name: "제주특별자치도 전체",
+                desc: "대한민국 최대의 섬이자 특별자치도로, 독특한 화산 지형과 자연 생태계, 그리고 고유의 문화를 간직한 평화의 섬입니다.",
+                current_pop: "675,500명",
+                households: "314,800세대",
+                men: "338,900명",
+                women: "336,600명",
+                men_raw: 338900,
+                women_raw: 336600,
+                density: "364명/㎢",
+                growth: "0.21% 증가 (전년비)",
+                trend_direction: "up",
+                growth_color: "text-emerald-500",
+                trend: [667000, 671000, 674169, 676000, 678000, 676317, 673104, 674500, 675500],
+                themeColor: "rgb(20, 184, 166)",
+                themeBg: "rgba(20, 184, 166, 0.1)"
+            },
+            'jeju-west': {
+                name: "제주 서부 (애월·한림·한경)",
+                desc: "아름다운 협재·곽지 해변을 품고 있으며 최근 독채 펜션, 감성 카페 등의 발전과 이주민 유입으로 귀농·귀촌 트렌드가 가장 활발한 서부 평야 지역입니다.",
+                current_pop: "81,200명",
+                households: "37,800세대",
+                men: "41,500명",
+                women: "39,700명",
+                men_raw: 41500,
+                women_raw: 39700,
+                density: "241명/㎢",
+                growth: "1.12% 증가 (전년비)",
+                trend_direction: "up",
+                growth_color: "text-emerald-500",
+                trend: [72000, 74200, 76500, 78100, 79200, 79800, 80100, 80700, 81200],
+                themeColor: "rgb(16, 185, 129)",
+                themeBg: "rgba(16, 185, 129, 0.1)",
+                coords: [GOSAN, NW_1, NW_2, N_DIV, HALLA, W_DIV]
+            },
+            'jeju-center': {
+                name: "제주 중부 (제주 도심권)",
+                desc: "제주국제공항과 행정타운, 대규모 주거단지가 집중되어 있는 경제·교육의 중심지입니다. 제주 전체 인구의 절반 이상이 상주하고 있습니다.",
+                current_pop: "385,000명",
+                households: "178,200세대",
+                men: "191,800명",
+                women: "193,200명",
+                men_raw: 191800,
+                women_raw: 193200,
+                density: "1,515명/㎢",
+                growth: "-0.15% 감소 (전년비)",
+                trend_direction: "down",
+                growth_color: "text-rose-500",
+                trend: [391000, 393500, 394200, 395000, 394800, 391200, 387600, 385900, 385000],
+                themeColor: "rgb(13, 148, 136)",
+                themeBg: "rgba(13, 148, 136, 0.1)",
+                coords: [N_DIV, N_CENT, NE_DIV, HALLA]
+            },
+            'jeju-east': {
+                name: "제주 동부 (조천·구좌·우도)",
+                desc: "함덕 해변과 거문오름, 구좌 당근밭, 해녀 문화가 살아 숨 쉬는 에코투어의 중심지입니다. 한가롭고 목가적인 제주 고유의 매력이 보존되어 있습니다.",
+                current_pop: "42,500명",
+                households: "20,100세대",
+                men: "21,950명",
+                women: "20,550명",
+                men_raw: 21950,
+                women_raw: 20550,
+                density: "132명/㎢",
+                growth: "-0.45% 감소 (전년비)",
+                trend_direction: "down",
+                growth_color: "text-rose-500",
+                trend: [44200, 44000, 43900, 43800, 43500, 43100, 42800, 42600, 42500],
+                themeColor: "rgb(6, 182, 212)",
+                themeBg: "rgba(6, 182, 212, 0.1)",
+                coords: [NE_DIV, NE_EAST, EAST_TIP, SE_DIV, HALLA]
+            },
+            'seogwipo-west': {
+                name: "서귀포 서부 (대정·안덕)",
+                desc: "제주영어교육도시와 제주신화월드가 자리 잡고 있는 고품격 교육·관광 특화 지역입니다. 외국 유학 대안 수요로 가족 단위 실거주 인구가 많습니다.",
+                current_pop: "43,100명",
+                households: "19,800세대",
+                men: "21,950명",
+                women: "21,150명",
+                men_raw: 21950,
+                women_raw: 21150,
+                density: "168명/㎢",
+                growth: "1.85% 증가 (전년비)",
+                trend_direction: "up",
+                growth_color: "text-emerald-500",
+                trend: [34000, 36200, 37900, 39000, 40100, 41200, 42100, 42700, 43100],
+                themeColor: "rgb(59, 130, 246)",
+                themeBg: "rgba(59, 130, 246, 0.1)",
+                coords: [HALLA, SW_INNER, SW_DIV, SW_SOUTH, GOSAN, W_DIV]
+            },
+            'seogwipo-center': {
+                name: "서귀포 중부 (서귀포 도심권)",
+                desc: "천지연폭포, 이중섭거리, 매일올레시장 등이 위치한 역사와 문화의 서귀포 중심부입니다. 따뜻한 남국의 기후와 여유로운 생활 양식이 돋보입니다.",
+                current_pop: "81,900명",
+                households: "39,400세대",
+                men: "41,300명",
+                women: "40,600명",
+                men_raw: 41300,
+                women_raw: 40600,
+                density: "396명/㎢",
+                growth: "0.12% 증가 (전년비)",
+                trend_direction: "up",
+                growth_color: "text-emerald-500",
+                trend: [80500, 81000, 81200, 81500, 81900, 81600, 81400, 81700, 81900],
+                themeColor: "rgb(99, 102, 241)",
+                themeBg: "rgba(99, 102, 241, 0.1)",
+                coords: [HALLA, S_DIV, S_CENT, SW_DIV, SW_INNER]
+            },
+            'seogwipo-east': {
+                name: "서귀포 동부 (남원·표선·성산)",
+                desc: "고품질 타이벡 감귤의 산지이자 표선 민속촌, 성산일출봉이 위치해 자연경관 중심 관광산업과 감귤 농업이 정밀하게 발달한 청정 벨트입니다.",
+                current_pop: "41,800명",
+                households: "19,500세대",
+                men: "21,400명",
+                women: "20,400명",
+                men_raw: 21400,
+                women_raw: 20400,
+                density: "126명/㎢",
+                growth: "-0.82% 감소 (전년비)",
+                trend_direction: "down",
+                growth_color: "text-rose-500",
+                trend: [43300, 43100, 42900, 42700, 42500, 42300, 42000, 41900, 41800],
+                themeColor: "rgb(14, 165, 233)",
+                themeBg: "rgba(14, 165, 233, 0.1)",
+                coords: [HALLA, SE_DIV, EAST_TIP, SE_SOUTH, S_DIV]
+            }
+        };
+
+        const years = ["2018", "2019", "2020", "2021", "2022", "2023", "2024", "2025", "2026"];
+
+        // DOM Elements
+        const btnReset = document.getElementById('btn-reset');
+        const regType = document.getElementById('region-type');
+        const regTitle = document.getElementById('region-title');
+        const regDesc = document.getElementById('region-desc');
+        const statTotal = document.getElementById('stat-total');
+        const statHouseholds = document.getElementById('stat-households');
+        const statMen = document.getElementById('stat-men');
+        const statWomen = document.getElementById('stat-women');
+        const statDensity = document.getElementById('stat-density');
+        const growthRate = document.getElementById('growth-rate');
+        const growthBadge = document.getElementById('growth-badge');
+        const ratioMen = document.getElementById('ratio-men');
+        const ratioWomen = document.getElementById('ratio-women');
+        const barMen = document.getElementById('bar-men');
+        const barWomen = document.getElementById('bar-women');
+        const trendIcon = document.getElementById('trend-icon');
+
+        // Global Leaflet map and polygon cache
+        let map;
+        let layers = {};
+        let lockedRegion = null;
+        let chart = null;
+
+        // Init Chart.js
+        function initChart() {
+            const ctx = document.getElementById('trendChart').getContext('2d');
+            
+            const gradient = ctx.createLinearGradient(0, 0, 0, 150);
+            gradient.addColorStop(0, 'rgba(20, 184, 166, 0.3)');
+            gradient.addColorStop(1, 'rgba(20, 184, 166, 0.0)');
+
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: years,
+                    datasets: [{
+                        label: '주민등록인구 (명)',
+                        data: data.total.trend,
+                        fill: true,
+                        backgroundColor: gradient,
+                        borderColor: 'rgb(20, 184, 166)',
+                        borderWidth: 3,
+                        pointBackgroundColor: 'rgb(20, 184, 166)',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 2,
+                        pointRadius: 4,
+                        pointHoverRadius: 6,
+                        tension: 0.35
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return context.parsed.y.toLocaleString() + ' 명';
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            grid: { color: '#f1f5f9' },
+                            ticks: {
+                                color: '#94a3b8',
+                                font: { size: 10 },
+                                callback: function(value) {
+                                    if(value >= 10000) return (value / 10000) + '만';
+                                    return value;
+                                }
+                            }
+                        },
+                        x: {
+                            grid: { display: false },
+                            ticks: { color: '#94a3b8', font: { size: 10 } }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Initialize Leaflet Map
+        function initMap() {
+            // Setup map container (center of Jeju, initial zoom level 10)
+            map = L.map('map', {
+                center: [33.3617, 126.5492],
+                zoom: 10,
+                scrollWheelZoom: false, // Prevent page scroll interception
+                doubleClickZoom: true,
+                zoomControl: true,
+                attributionControl: true
+            });
+
+            // Clean & modern theme for metrics representation (CartoDB Positron)
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+                subdomains: 'abcd',
+                maxZoom: 15
+            }).addTo(map);
+
+            // Create Hallasan Marker to give context on the real map
+            const hallaIcon = L.divIcon({
+                html: `<div class="flex flex-col items-center justify-center transform -translate-y-2 pointer-events-none">
+                        <span class="text-[10px] bg-slate-900/90 text-teal-400 font-extrabold px-1.5 py-0.5 rounded shadow-lg border border-teal-500/30 whitespace-nowrap">⛰️ 한라산</span>
+                       </div>`,
+                className: 'custom-div-icon',
+                iconSize: [0, 0]
+            });
+            L.marker(HALLA, { icon: hallaIcon }).addTo(map);
+
+            // Add Polygons for each of the 6 detailed regions
+            Object.keys(data).forEach(key => {
+                if (key === 'total') return;
+
+                const regData = data[key];
+                
+                // Set distinct color values depending on the region's nature
+                const defaultStyle = {
+                    fillColor: regData.themeColor,
+                    fillOpacity: 0.15,
+                    color: regData.themeColor,
+                    weight: 2,
+                    dashArray: '3',
+                    className: 'map-path'
+                };
+
+                const polygon = L.polygon(regData.coords, defaultStyle).addTo(map);
+                layers[key] = polygon;
+
+                // Simple styled tooltips
+                polygon.bindTooltip(regData.name.split(' (')[0] + `<br><span class="text-teal-300 font-extrabold">${regData.current_pop}</span>`, {
+                    direction: 'top',
+                    sticky: true,
+                    className: 'leaflet-tooltip-custom'
+                });
+
+                // Interactivity
+                polygon.on('mouseover', function (e) {
+                    if (lockedRegion) return;
+                    
+                    this.setStyle({
+                        fillOpacity: 0.35,
+                        weight: 3.5,
+                        dashArray: ''
+                    });
+
+                    updateDashboard(key);
+                });
+
+                polygon.on('mouseout', function (e) {
+                    if (lockedRegion) return;
+                    
+                    this.setStyle(defaultStyle);
+                    updateDashboard('total');
+                });
+
+                polygon.on('click', function (e) {
+                    L.DomEvent.stopPropagation(e);
+                    
+                    if (lockedRegion === key) {
+                        // Unlock current selection
+                        resetAllPolygons();
+                        lockedRegion = null;
+                        updateDashboard('total');
+                    } else {
+                        // Reset all previous locks
+                        resetAllPolygons();
+                        
+                        // Set new lock style
+                        lockedRegion = key;
+                        this.setStyle({
+                            fillOpacity: 0.45,
+                            weight: 4,
+                            color: '#f59e0b', // Amber highlight border
+                            dashArray: ''
+                        });
+                        
+                        updateDashboard(key);
+                        map.fitBounds(this.getBounds(), { padding: [40, 40], maxZoom: 11 });
+                    }
+                });
+            });
+
+            // Click outside map to reset
+            map.on('click', function () {
+                resetSelection();
+            });
+        }
+
+        // Helper function to force focus from side elements or comparison tables
+        function focusRegion(key) {
+            const layer = layers[key];
+            if (!layer) return;
+
+            resetAllPolygons();
+            lockedRegion = key;
+            layer.setStyle({
+                fillOpacity: 0.45,
+                weight: 4,
+                color: '#f59e0b',
+                dashArray: ''
+            });
+            updateDashboard(key);
+            map.fitBounds(layer.getBounds(), { padding: [40, 40], maxZoom: 11 });
+        }
+
+        // Reset polygon styling back to default
+        function resetAllPolygons() {
+            Object.keys(layers).forEach(key => {
+                const regData = data[key];
+                layers[key].setStyle({
+                    fillColor: regData.themeColor,
+                    fillOpacity: 0.15,
+                    color: regData.themeColor,
+                    weight: 2,
+                    dashArray: '3'
+                });
+            });
+        }
+
+        // Reset entire Selection state
+        function resetSelection() {
+            lockedRegion = null;
+            resetAllPolygons();
+            updateDashboard('total');
+            map.setView([33.3617, 126.5492], 10);
+        }
+
+        // Update Dashboard Analytics & Trend Lines
+        function updateDashboard(regionKey) {
+            const regData = data[regionKey];
+            
+            // Core Text Sync
+            regType.textContent = regionKey === 'total' ? "제주특별자치도 전체" : "상세 분석 권역";
+            regTitle.textContent = regData.name;
+            regDesc.textContent = regData.desc;
+            statTotal.textContent = regData.current_pop;
+            statHouseholds.textContent = regData.households;
+            statMen.textContent = regData.men;
+            statWomen.textContent = regData.women;
+            statDensity.textContent = regData.density;
+            
+            // Growth rate UI arrow direction
+            growthRate.textContent = regData.growth;
+            growthBadge.className = `flex items-center gap-1 text-xs font-semibold ${regData.growth_color}`;
+
+            if (regData.trend_direction === 'up') {
+                trendIcon.innerHTML = `<path stroke-linecap="round" stroke-linejoin="round" d="M5 10l7-7m0 0l7 7m-7-7v18" />`;
+            } else {
+                trendIcon.innerHTML = `<path stroke-linecap="round" stroke-linejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3" />`;
+            }
+
+            // Gender ratio calculations
+            const totalRaw = regData.men_raw + regData.women_raw;
+            const pctMen = ((regData.men_raw / totalRaw) * 100).toFixed(1);
+            const pctWomen = ((regData.women_raw / totalRaw) * 100).toFixed(1);
+
+            ratioMen.textContent = pctMen;
+            ratioWomen.textContent = pctWomen;
+            barMen.style.width = `${pctMen}%`;
+            barWomen.style.width = `${pctWomen}%`;
+
+            // Theme Sync
+            barMen.style.backgroundColor = regData.themeColor;
+            barWomen.style.backgroundColor = regData.themeColor.replace('rgb', 'rgba').replace(')', ', 0.3)');
+
+            // Chart Update
+            if (chart) {
+                chart.data.datasets[0].data = regData.trend;
+                chart.data.datasets[0].borderColor = regData.themeColor;
+                chart.data.datasets[0].pointBackgroundColor = regData.themeColor;
+                
+                // Redraw gradient dynamically
+                const ctx = document.getElementById('trendChart').getContext('2d');
+                const gradient = ctx.createLinearGradient(0, 0, 0, 150);
+                gradient.addColorStop(0, regData.themeBg);
+                gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+                chart.data.datasets[0].backgroundColor = gradient;
+                
+                chart.update();
+            }
+
+            // Show or hide Reset Button
+            if (regionKey !== 'total') {
+                btnReset.classList.remove('hidden');
+            } else {
+                btnReset.classList.add('hidden');
+            }
+        }
+
+        // Global Bindings
+        btnReset.addEventListener('click', (e) => {
+            e.stopPropagation();
+            resetSelection();
+        });
+
+        // Initialize App on Window Load
+        window.onload = function() {
+            initChart();
+            initMap();
+            updateDashboard('total');
+        };
+    </script>
+</body>
+</html>
